@@ -1,10 +1,9 @@
 "use client"
 
 import type React from "react"
-
+import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
 import { Upload, AlertCircle, CheckCircle, Loader } from "lucide-react"
 import { getFarmerProfile } from "@/lib/storage"
 
@@ -15,6 +14,13 @@ export default function DiseaseDetectionPage() {
   const [loading, setLoading] = useState(false)
   const [analysis, setAnalysis] = useState<any>(null)
 
+  const cropHealthPct = analysis?.cropHealth != null
+    ? (analysis.cropHealth <= 1 ? Math.round(analysis.cropHealth * 100) : Math.round(analysis.cropHealth))
+    : 0
+  const confidencePct = analysis?.confidence != null
+    ? (analysis.confidence <= 1 ? Math.round(analysis.confidence * 100) : Math.round(analysis.confidence))
+    : 0
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -24,33 +30,43 @@ export default function DiseaseDetectionPage() {
 
     try {
       const reader = new FileReader()
+
       reader.onload = async (event) => {
         const imageBase64 = event.target?.result as string
+        try {
+          const response = await fetch("/api/disease-detection", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              imageBase64,
+              farmerContext: {
+                crop: farmerProfile?.currentCrop || "",
+                location: farmerProfile?.location || "",
+                soilPH: farmerProfile?.soilPH || "",
+                soilMoisture: farmerProfile?.soilMoisture || "",
+                language: farmerProfile?.language || "en",
+              },
+            }),
+          })
 
-        const response = await fetch("/api/disease-detection", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            imageBase64,
-            farmerContext: {
-              crop: farmerProfile?.currentCrop,
-              location: farmerProfile?.location,
-              soilPH: farmerProfile?.soilPH,
-              soilMoisture: farmerProfile?.soilMoisture,
-              language: farmerProfile?.language,
-            },
-          }),
-        })
+          if (!response.ok) throw new Error("Failed to analyze image")
 
-        const data = await response.json()
-        setAnalysis(data)
-        setAnalyzed(true)
+          const data = await response.json()
+          setAnalysis(data)
+          setAnalyzed(true)
+        } catch (err) {
+          console.error("Error analyzing image:", err)
+        } finally {
+          setLoading(false)
+        }
+      }
+
+      reader.onerror = () => {
         setLoading(false)
       }
       reader.readAsDataURL(file)
     } catch (error) {
       console.error("Error analyzing image:", error)
-      setLoading(false)
     }
   }
 
@@ -68,15 +84,24 @@ export default function DiseaseDetectionPage() {
         <Card className="p-6">
           <h2 className="text-2xl font-bold mb-6">Upload Crop Image</h2>
 
-          <div className="border-2 border-dashed border-border rounded-lg p-12 text-center mb-6 bg-muted/30">
+          <div
+            className="border-2 border-dashed border-border rounded-lg p-12 text-center mb-6 bg-muted/30"
+            onClick={() => document.getElementById("image-upload")?.click()}
+          >
             <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground mb-4">Drag and drop your crop image here or click to select</p>
-            <input type="file" accept="image/*" onChange={handleUpload} className="hidden" id="image-upload" />
-            <label htmlFor="image-upload">
-              <Button variant="outline" className="cursor-pointer bg-transparent">
-                Select Image
-              </Button>
-            </label>
+            <p className="text-muted-foreground mb-4">
+              Drag and drop your crop image here or click to select
+            </p>
+            <input
+              id="image-upload"
+              type="file"
+              accept="image/*"
+              onChange={handleUpload}
+              className="hidden"
+            />
+            <Button variant="outline" className="cursor-pointer bg-transparent">
+              Select Image
+            </Button>
           </div>
 
           {uploaded && (
@@ -120,8 +145,8 @@ export default function DiseaseDetectionPage() {
         </Card>
 
         {/* Results Section */}
-        {analyzed && analysis && (
-          <Card className="p-6 overflow-y-auto max-h-96">
+        {analyzed && analysis ? (
+          <Card className="p-6 overflow-y-auto max-h-96 relative">
             <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
               <AlertCircle className="w-6 h-6 text-accent" />
               Analysis Results
@@ -134,26 +159,29 @@ export default function DiseaseDetectionPage() {
                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                   <div
                     className={`h-full transition-all ${
-                      analysis.cropHealth > 70
+                      cropHealthPct > 70
                         ? "bg-green-500"
-                        : analysis.cropHealth > 40
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
+                        : cropHealthPct > 40
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
                     }`}
-                    style={{ width: `${analysis.cropHealth}%` }}
+                    style={{ width: `${cropHealthPct}%` }}
                   />
                 </div>
-                <p className="text-sm font-semibold mt-1">{analysis.cropHealth}% Healthy</p>
+                <p className="text-sm font-semibold mt-1">{cropHealthPct}% Healthy</p>
               </div>
 
-              {/* Disease Info */}
               <div className="border-b border-border pb-4">
                 <p className="text-sm text-muted-foreground mb-1">Disease Detected</p>
                 <p className="text-2xl font-bold text-accent">{analysis.disease}</p>
-                <p className="text-sm text-muted-foreground mt-1">Confidence: {analysis.confidence}%</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Confidence: {confidencePct}%
+                </p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div className="h-2 bg-accent rounded-full" style={{ width: `${confidencePct}%` }} />
+                </div>
               </div>
 
-              {/* Severity */}
               <div className="border-b border-border pb-4">
                 <p className="text-sm text-muted-foreground mb-1">Severity</p>
                 <p
@@ -161,66 +189,89 @@ export default function DiseaseDetectionPage() {
                     analysis.severity === "High"
                       ? "bg-red-100 text-red-800"
                       : analysis.severity === "Medium"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-green-100 text-green-800"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "bg-green-100 text-green-800"
                   }`}
                 >
                   {analysis.severity}
                 </p>
               </div>
 
-              {/* Affected Area */}
-              <div className="border-b border-border pb-4">
-                <p className="text-sm text-muted-foreground mb-1">Affected Area</p>
-                <p className="font-semibold">{analysis.affectedArea}</p>
-              </div>
+              {analysis.cause && (
+                <div className="border-b border-border pb-4">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Cause</p>
+                  <p className="text-sm">{analysis.cause}</p>
+                </div>
+              )}
 
-              {/* Cause */}
-              <div className="border-b border-border pb-4">
-                <p className="text-sm font-semibold text-muted-foreground mb-2">Cause</p>
-                <p className="text-sm">{analysis.cause}</p>
-              </div>
+              {analysis.harmfulness && (
+                <div className="border-b border-border pb-4">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Potential Impact</p>
+                  <p className="text-sm">{analysis.harmfulness}</p>
+                </div>
+              )}
 
-              {/* Why It Happened */}
-              <div className="border-b border-border pb-4">
-                <p className="text-sm font-semibold text-muted-foreground mb-2">Why It Happened</p>
-                <ul className="text-sm space-y-1">
-                  {analysis.whyHappened?.map((reason: string, idx: number) => (
-                    <li key={idx}>• {reason}</li>
-                  ))}
-                </ul>
-              </div>
+              {analysis.affectedArea && (
+                <div className="border-b border-border pb-4">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Affected Area</p>
+                  <p className="text-sm">{analysis.affectedArea}</p>
+                </div>
+              )}
 
-              {/* Harmfulness */}
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                <p className="text-sm font-semibold text-red-900 mb-2">Potential Impact</p>
-                <p className="text-red-800 text-sm">{analysis.harmfulness}</p>
-              </div>
+              {Array.isArray(analysis.whyHappened) && analysis.whyHappened.length > 0 && (
+                <div className="border-b border-border pb-4">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Why It Happened</p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {analysis.whyHappened.map((item: string, idx: number) => (
+                      <li key={`why-${idx}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-              {/* Treatment */}
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                <p className="text-sm font-semibold text-orange-900 mb-2">Treatment</p>
-                <ul className="text-orange-800 text-sm space-y-1">
-                  {analysis.treatment?.map((step: string, idx: number) => (
-                    <li key={idx}>• {step}</li>
-                  ))}
-                </ul>
-              </div>
+              {Array.isArray(analysis.treatment) && analysis.treatment.length > 0 && (
+                <div className="border-b border-border pb-4">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Treatment Steps</p>
+                  <ol className="list-decimal pl-5 space-y-1 text-sm">
+                    {analysis.treatment.map((step: string, idx: number) => (
+                      <li key={`treat-${idx}`}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
-              {/* Prevention */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-green-900 mb-2">Prevention</p>
-                <ul className="text-green-800 text-sm space-y-1">
-                  {analysis.prevention?.map((step: string, idx: number) => (
-                    <li key={idx}>• {step}</li>
-                  ))}
-                </ul>
-              </div>
+              {Array.isArray(analysis.prevention) && analysis.prevention.length > 0 && (
+                <div className="border-b border-border pb-4">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Prevention</p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {analysis.prevention.map((p: string, idx: number) => (
+                      <li key={`prev-${idx}`}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {Array.isArray(analysis.recommendations) && analysis.recommendations.length > 0 && (
+                <div className="pb-2">
+                  <p className="text-sm font-semibold text-muted-foreground mb-2">Recommendations</p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {analysis.recommendations.map((r: string, idx: number) => (
+                      <li key={`rec-${idx}`}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
+            {loading && (
+              <div className="absolute inset-0 bg-white/60 dark:bg-black/30 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                <div className="flex items-center gap-2 text-sm">
+                  <Loader className="w-4 h-4 animate-spin" />
+                  Analyzing...
+                </div>
+              </div>
+            )}
           </Card>
-        )}
-
-        {!analyzed && (
+        ) : (
           <Card className="p-6 flex items-center justify-center min-h-96">
             <div className="text-center">
               <CheckCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-30" />
@@ -232,3 +283,4 @@ export default function DiseaseDetectionPage() {
     </div>
   )
 }
+
