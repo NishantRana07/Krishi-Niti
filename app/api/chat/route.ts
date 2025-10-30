@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 Farmer Context:
 - Name: ${farmerContext?.name || "Farmer"}
 - Current Crop: ${farmerContext?.crop || "Unknown"}
-- Location: ${"Dehradun"}
+- Location: ${farmerContext?.location || "Unknown"}
 - Soil pH: ${farmerContext?.soilPH || "Unknown"}
 - Soil Moisture: ${farmerContext?.soilMoisture || "Unknown"}%
 

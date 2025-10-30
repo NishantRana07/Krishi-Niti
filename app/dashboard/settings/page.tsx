@@ -201,7 +201,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Last Updated</span>
-            <span className="font-semibold">October 2024</span>
+            <span className="font-semibold">October 2025</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Status</span>

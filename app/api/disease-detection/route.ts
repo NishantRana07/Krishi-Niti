@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
         disease: "Healthy Crop",
         confidence: 100,
         cropHealth: 100,
-        severity: "Low",
+        severity: "Low" as const,
         cause: "",
         whyHappened: [],
         harmfulness: "",
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         prevention: [],
         affectedArea: "0%",
         recommendations: [
-          "AI key not configured; showing default healthy status.",
+          "AI service is not configured. Please set GOOGLE_GENERATIVE_AI_API_KEY in your environment.",
         ],
       })
     }
@@ -109,3 +109,4 @@ Image data: ${imageBase64}`,
     return NextResponse.json(fallbackResponse)
   }
 }
+
